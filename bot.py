@@ -6,11 +6,14 @@ import re
 import aiofiles
 import httpx
 from aiogram import Bot, Dispatcher, F, types, BaseMiddleware
-from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, Audio, Voice, Document, Video, ReplyParameters
 from loguru import logger
 from pydub import AudioSegment
+
+from aiogram.client.bot import DefaultBotProperties
+from aiogram.enums import ParseMode
+from aiogram.client.telegram import TelegramAPIServer
 
 import config
 import db
@@ -19,20 +22,31 @@ import db
 logger.add(config.LOGS_PATH / "bot.log", rotation="10 MB", compression="zip", level="INFO")
 config.setup_directories()
 
+
+# --- Initialization Block ---
 if config.API_SERVER_URL:
-    session = AiohttpSession(api=Bot(token=config.BOT_TOKEN, server=config.API_SERVER_URL).session.api)
-    bot = Bot(token=config.BOT_TOKEN, session=session)
+    local_server = TelegramAPIServer.from_base(config.API_SERVER_URL, is_local=True)
+    bot = Bot(
+        token=config.BOT_TOKEN,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        server=local_server 
+    )
 else:
-    bot = Bot(token=config.BOT_TOKEN)
+    # If no local server is used, initialize the bot as usual
+    bot = Bot(
+        token=config.BOT_TOKEN,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+    )
 
 dp = Dispatcher()
 
+
 # --- User-facing Messages (in Russian) ---
 MSG_ASK_PASSWORD = "🔐 Введите пароль для доступа к боту."
-MSG_WELCOME = """Я голосовой бот, преобразующий ваш голос.
+MSG_WELCOME = """Я голосовой бот, преобразующий ваш голос с помощью ElevenLabs Speech-to-Speech API.
 
-Отправьте мне аудиофайл, голосовое сообщение или видео **(до 2 ГБ)**.
-Скорость обработки зависит от длины отправленого аудио."""
+Отправьте мне аудиофайл, голосовое сообщение или видео (до 2 ГБ).
+Длинные файлы будут автоматически разделены на части и обработаны."""
 MSG_SERVER_ERROR = "Произошла ошибка на сервере. Пожалуйста, повторите попытку позже."
 
 # --- ACCELERATED Audio Functions using FFMPEG ---
@@ -40,13 +54,12 @@ MSG_SERVER_ERROR = "Произошла ошибка на сервере. Пож�
 async def split_audio_with_ffmpeg(file_path: Path) -> list[Path]:
     """
     Accelerated audio splitting using ffmpeg.
-    It first detects silences, then splits the audio based on them.
+    First, it detects silences, then it splits the audio based on them.
     """
-    MAX_DURATION_S = 295  # 5 minutes with a safety margin, in seconds
-    SILENCE_DURATION_S = 0.7  # Minimum silence duration to be detected
-    SILENCE_THRESHOLD = "-25dB" # dB level to consider as silence
+    MAX_DURATION_S = 295
+    SILENCE_DURATION_S = 0.7
+    SILENCE_THRESHOLD = "-25dB"
 
-    # Step 1: Get file duration using ffprobe
     ffprobe_process = await asyncio.create_subprocess_exec(
         'ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', str(file_path),
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
@@ -54,76 +67,45 @@ async def split_audio_with_ffmpeg(file_path: Path) -> list[Path]:
     stdout, _ = await ffprobe_process.communicate()
     try:
         duration = float(stdout.strip())
-        if duration <= MAX_DURATION_S:
-            return [] # No splitting needed
+        if duration <= MAX_DURATION_S: return []
     except ValueError:
         raise IOError("Could not determine file duration using ffprobe.")
 
-    # Step 2: Detect silences using ffmpeg's silencedetect filter
-    silence_detect_cmd = [
-        'ffmpeg', '-i', str(file_path), '-af', f'silencedetect=noise={SILENCE_THRESHOLD}:d={SILENCE_DURATION_S}', 
-        '-f', 'null', '-'
-    ]
-    process = await asyncio.create_subprocess_exec(
-        *silence_detect_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-    )
+    silence_detect_cmd = ['ffmpeg', '-i', str(file_path), '-af', f'silencedetect=noise={SILENCE_THRESHOLD}:d={SILENCE_DURATION_S}', '-f', 'null', '-']
+    process = await asyncio.create_subprocess_exec(*silence_detect_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     _, stderr = await process.communicate()
     stderr_str = stderr.decode('utf-8', errors='ignore')
     
-    # Parse ffmpeg output to find silence end timestamps
     silence_end_re = re.compile(r'silence_end: (\d+\.?\d*)')
     silence_ends = [float(x) for x in silence_end_re.findall(stderr_str)]
 
-    # Step 3: Plan the splits based on detected silences
-    chunk_paths = []
-    current_pos = 0.0
-    chunk_counter = 1
+    chunk_paths, current_pos, chunk_counter = [], 0.0, 1
     
     while (duration - current_pos) > MAX_DURATION_S:
-        split_at = current_pos + MAX_DURATION_S
-        
-        # Find the last silence before the target split point for a clean cut
-        best_split_point = None
+        split_at, best_split_point = current_pos + MAX_DURATION_S, None
         for end_time in silence_ends:
-            if current_pos < end_time < split_at:
-                best_split_point = end_time
-        
-        if best_split_point:
-            split_at = best_split_point
+            if current_pos < end_time < split_at: best_split_point = end_time
+        if best_split_point: split_at = best_split_point
 
         chunk_path = file_path.parent / f"{file_path.stem}_chunk_{chunk_counter}.wav"
-        
-        # Step 4: Split the chunk using ffmpeg 
-        split_cmd = [
-            'ffmpeg', '-i', str(file_path), '-ss', str(current_pos), '-to', str(split_at), 
-            '-c', 'copy', str(chunk_path)
-        ]
+        split_cmd = ['ffmpeg', '-i', str(file_path), '-ss', str(current_pos), '-to', str(split_at), '-c', 'copy', str(chunk_path)]
         split_process = await asyncio.create_subprocess_exec(*split_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         await split_process.wait()
-        
-        if chunk_path.exists():
-            chunk_paths.append(chunk_path)
-        
-        current_pos = split_at
-        chunk_counter += 1
+        if chunk_path.exists(): chunk_paths.append(chunk_path)
+        current_pos, chunk_counter = split_at, chunk_counter + 1
 
-    # Add the last remaining chunk
     if current_pos < duration:
         last_chunk_path = file_path.parent / f"{file_path.stem}_chunk_{chunk_counter}.wav"
-        split_cmd = [
-            'ffmpeg', '-i', str(file_path), '-ss', str(current_pos),
-            '-c', 'copy', str(last_chunk_path)
-        ]
+        split_cmd = ['ffmpeg', '-i', str(file_path), '-ss', str(current_pos), '-c', 'copy', str(last_chunk_path)]
         split_process = await asyncio.create_subprocess_exec(*split_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         await split_process.wait()
-        if last_chunk_path.exists():
-            chunk_paths.append(last_chunk_path)
+        if last_chunk_path.exists(): chunk_paths.append(last_chunk_path)
             
     return chunk_paths
 
 
 async def merge_audio_chunks(chunk_paths: list[Path], output_path: Path) -> Path:
-    """Merges audio chunks into a single file (pydub is kept for its simplicity here)."""
+    """Merges audio chunks into a single file."""
     loop = asyncio.get_event_loop()
     
     def do_merge():
@@ -135,7 +117,7 @@ async def merge_audio_chunks(chunk_paths: list[Path], output_path: Path) -> Path
 
     return await loop.run_in_executor(None, do_merge)
 
-# --- Middleware and Handlers ---
+# --- Middleware, Commands, and Password Handler ---
 class AuthMiddleware(BaseMiddleware):
     async def __call__(self, handler, event: types.Update, data: dict):
         if not event.message: return await handler(event, data)

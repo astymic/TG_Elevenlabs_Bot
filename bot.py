@@ -257,9 +257,16 @@ async def handle_files(message: Message):
     except Exception as e:
         logger.error(f"An error occurred for user {message.from_user.id}:\n{traceback.format_exc()}")
         await status_msg.edit_text(MSG_SERVER_ERROR)
-        await bot.send_message(
-            config.DEV_TG_ID, f"❗️ **An error occurred in the bot**\n\n**User:** `{message.from_user.id}`\n**Traceback:**\n```\n{traceback.format_exc()}\n```", parse_mode="Markdown"
+        error_traceback = traceback.format_exc()
+        truncated_traceback = error_traceback[-2000:] 
+
+        error_text = (
+            f"❗️ **An error occurred in the bot**\n\n"
+            f"**User:** `{message.from_user.id}`\n"
+            f"**Traceback (last 2000 chars):**\n```\n{truncated_traceback}\n```"
         )
+        await bot.send_message(config.DEV_TG_ID, error_text)
+        
     finally:
         # 7. Final cleanup of all temporary files from the list
         logger.info(f"Cleaning up {len(temp_files_to_delete)} temporary files.")

@@ -5,9 +5,10 @@ import re
 
 import aiofiles
 import httpx
+from aiogram.client.bot import DefaultBotProperties
 from aiogram import Bot, Dispatcher, F, types, BaseMiddleware
 from aiogram.client.session.aiohttp import AiohttpSession
-from aiogram.client.bot import DefaultBotProperties
+from aiogram.client.telegram import TelegramAPIServer
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, Audio, Voice, Document, Video, ReplyParameters
 from loguru import logger
@@ -21,11 +22,12 @@ logger.add(config.LOGS_PATH / "bot.log", rotation="10 MB", compression="zip", le
 config.setup_directories()
 
 if config.API_SERVER_URL:
-    # If a local server URL is specified, create a custom session
-    session = AiohttpSession(api_url=config.API_SERVER_URL)
+    # Если указан локальный сервер, создаем кастомный объект сервера
+    telegram_api_server = TelegramAPIServer.from_base(config.API_SERVER_URL)
+    session = AiohttpSession(api=telegram_api_server)
     bot = Bot(token=config.BOT_TOKEN, session=session, default=DefaultBotProperties(parse_mode="Markdown"))
 else:
-    # Otherwise, use the default session for the cloud Telegram API
+    # В противном случае, используем стандартный API Telegram
     bot = Bot(token=config.BOT_TOKEN, default=DefaultBotProperties(parse_mode="Markdown"))
 
 dp = Dispatcher()

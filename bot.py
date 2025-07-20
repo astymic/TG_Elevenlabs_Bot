@@ -23,7 +23,7 @@ config.setup_directories()
 
 if config.API_SERVER_URL:
     # Если указан локальный сервер, создаем кастомный объект сервера
-    telegram_api_server = TelegramAPIServer.from_base(config.API_SERVER_URL)
+    telegram_api_server = TelegramAPIServer.from_base(config.API_SERVER_URL, is_local=True)
     session = AiohttpSession(api=telegram_api_server)
     bot = Bot(token=config.BOT_TOKEN, session=session, default=DefaultBotProperties(parse_mode="Markdown"))
 else:

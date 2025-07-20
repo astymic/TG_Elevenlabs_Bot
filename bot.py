@@ -13,7 +13,7 @@ from pydub import AudioSegment
 
 from aiogram.client.bot import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.client.telegram import TelegramAPIServer
+from aiogram.client.telegram import TelegramAPIServer, TelegramAPIServerType
 
 import config
 import db
@@ -25,7 +25,7 @@ config.setup_directories()
 
 # --- Initialization Block ---
 if config.API_SERVER_URL:
-    local_server = TelegramAPIServer.from_base(config.API_SERVER_URL, is_local=True)
+    local_server = TelegramAPIServer.from_base(config.API_SERVER_URL, type=TelegramAPIServerType.LOCAL)
     bot = Bot(
         token=config.BOT_TOKEN,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),

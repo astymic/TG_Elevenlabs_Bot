@@ -222,7 +222,8 @@ async def handle_files(message: Message):
             await status_msg.edit_text(f"Обработка части {i+1}/{total_chunks}...")
             
             api_data = {"output_format": "pcm_48000"}
-            async with httpx.AsyncClient(timeout=600.0) as client:
+            timeouts = httpx.Timeout(10.0, read=240.0, write=60.0, pool=300.0)
+            async with httpx.AsyncClient(timeout=timeouts) as client:
                 with open(chunk_path, "rb") as f_audio:
                     response = await client.post(
                         config.ELEVEN_API_URL, headers={"xi-api-key": config.ELEVEN_API_KEY}, 

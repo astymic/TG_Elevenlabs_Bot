@@ -19,9 +19,8 @@ DEV_TG_ID = int(os.getenv("DEV_TG_ID"))
 # --- ElevenLabs ---
 ELEVEN_API_KEY = os.getenv("ELEVEN_API_KEY")
 ELEVEN_VOICE_ID = os.getenv("ELEVEN_VOICE_ID")
+# The final endpoint URL is constructed here using the voice_id
 ELEVEN_API_URL = f"https://api.elevenlabs.io/v1/speech-to-speech/{ELEVEN_VOICE_ID}"
-# File size limit in bytes (50 MB)
-ELEVEN_FILE_SIZE_LIMIT = 50 * 1024 * 1024
 
 # --- Paths and Constants ---
 BASE_DIR = Path(__file__).parent
@@ -33,7 +32,7 @@ LOGS_PATH = BASE_DIR / "logs"
 DB_STORAGE_PATH = BASE_DIR / "storage"
 DB_PATH = DB_STORAGE_PATH / "bot_users.db"
 
-# File lifetime in seconds (24 hours)
+# File lifetime in seconds (24 hours) for the cleanup script
 FILE_LIFETIME_SECONDS = 24 * 60 * 60
 
 def setup_directories():

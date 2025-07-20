@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.eggs/
+*.egg-info/
+*.egg
+
+# Secrets and environment-specific files
+.env
+.env.*
+
+# Logs and user data
+logs/
+*.log
+storage/
+tmp_files/
+tmp_api_data/
+
+# IDE files
+.idea/
+.vscode/

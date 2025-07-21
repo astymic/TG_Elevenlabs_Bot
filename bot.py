@@ -23,12 +23,12 @@ logger.add(config.LOGS_PATH / "bot.log", rotation="10 MB", compression="zip", le
 config.setup_directories()
 
 if config.API_SERVER_URL:
-    # Если указан локальный сервер, создаем кастомный объект сервера
+    # If a local server is specified, create a custom server object
     telegram_api_server = TelegramAPIServer.from_base(config.API_SERVER_URL, is_local=True)
     session = AiohttpSession(api=telegram_api_server)
     bot = Bot(token=config.BOT_TOKEN, session=session, default=DefaultBotProperties(parse_mode="Markdown"))
 else:
-    # В противном случае, используем стандартный API Telegram
+    # Otherwise, use the standard Telegram API
     bot = Bot(token=config.BOT_TOKEN, default=DefaultBotProperties(parse_mode="Markdown"))
 
 dp = Dispatcher()
@@ -203,7 +203,7 @@ async def handle_files(message: Message):
             source_audio_path = download_path # The original file is already audio
 
         # 3. Split audio into chunks
-        await status_msg.edit_text("Анализ аудио и разделение на части...")
+        await status_msg.edit_text("Анализ аудио...")
         original_chunks_paths = await split_audio_with_ffmpeg(source_audio_path)
         
         if original_chunks_paths:
@@ -230,21 +230,14 @@ async def handle_files(message: Message):
                         files={"audio": f_audio}, data=api_data
                     )
             
-            # if response.status_code != 200:
-            #     raise Exception(f"ElevenLabs API error on chunk {i+1}: {response.json().get('detail', {}).get('message', 'Unknown error')}")
-            
             if response.status_code != 200:
                 error_details = ""
                 try:
-                    # Сначала пытаемся прочитать ответ как JSON
                     data = response.json()
                     error_details = data.get("detail", {}).get("message", str(data))
                 except json.JSONDecodeError:
-                    # Если не получилось (это не JSON), используем сырой текст ответа
-                    # Обрезаем до 500 символов, чтобы не спамить длинным HTML
                     error_details = response.text[:500]
                 
-                # Формируем и выбрасываем понятное исключение
                 raise Exception(f"Ошибка от ElevenLabs на части {i+1} (Статус: {response.status_code}): {error_details}")
 
             processed_chunk_path = chunk_path.with_name(f"{chunk_path.stem}_processed.wav")

@@ -20,7 +20,7 @@ DEV_TG_ID = int(os.getenv("DEV_TG_ID"))
 ELEVEN_API_KEY = os.getenv("ELEVEN_API_KEY")
 ELEVEN_VOICE_ID = os.getenv("ELEVEN_VOICE_ID")
 # The final endpoint URL is constructed here using the voice_id
-ELEVEN_API_URL = f"https://api.elevenlabs.io/v1/speech-to-speech/{ELEVEN_VOICE_ID}"
+ELEVEN_API_URL = f"https://api.elevenlabs.io/v1/speech-to-speech/{ELEVEN_VOICE_ID}?remove_background_noise=true"
 
 # --- Paths and Constants ---
 BASE_DIR = Path(__file__).parent

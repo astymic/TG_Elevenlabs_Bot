@@ -2,6 +2,7 @@ import asyncio
 import traceback
 from pathlib import Path
 import re
+import json
 
 import aiofiles
 import httpx
@@ -229,8 +230,22 @@ async def handle_files(message: Message):
                         files={"audio": f_audio}, data=api_data
                     )
             
+            # if response.status_code != 200:
+            #     raise Exception(f"ElevenLabs API error on chunk {i+1}: {response.json().get('detail', {}).get('message', 'Unknown error')}")
+            
             if response.status_code != 200:
-                raise Exception(f"ElevenLabs API error on chunk {i+1}: {response.json().get('detail', {}).get('message', 'Unknown error')}")
+                error_details = ""
+                try:
+                    # Сначала пытаемся прочитать ответ как JSON
+                    data = response.json()
+                    error_details = data.get("detail", {}).get("message", str(data))
+                except json.JSONDecodeError:
+                    # Если не получилось (это не JSON), используем сырой текст ответа
+                    # Обрезаем до 500 символов, чтобы не спамить длинным HTML
+                    error_details = response.text[:500]
+                
+                # Формируем и выбрасываем понятное исключение
+                raise Exception(f"Ошибка от ElevenLabs на части {i+1} (Статус: {response.status_code}): {error_details}")
 
             processed_chunk_path = chunk_path.with_name(f"{chunk_path.stem}_processed.wav")
             async with aiofiles.open(processed_chunk_path, 'wb') as f: await f.write(response.content)

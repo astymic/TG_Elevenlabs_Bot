@@ -386,7 +386,10 @@ async def handle_files(message: Message):
         total_chunks = len(chunks_to_process)
         for i, chunk_path in enumerate(chunks_to_process):
             await status_msg.edit_text(f"Обработка части {i+1}/{total_chunks}...")
-            api_data = {"output_format": "pcm_48000"}
+            api_data = {
+                "output_format": "pcm_48000",
+                "remove_background_noise": "true"
+            }
             timeouts = httpx.Timeout(10.0, read=120.0, write=60.0, pool=300.0)
             async with httpx.AsyncClient(timeout=timeouts) as client:
                 with open(chunk_path, "rb") as f_audio:
